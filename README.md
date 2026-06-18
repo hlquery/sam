@@ -1,140 +1,157 @@
-# hlquery Natural Query Utility
+<div align="center">
+  <img src="https://docs.hlquery.com/img/hlquery/2.png" alt="hlquery logo" width="200">
+</div>
 
-This directory contains standalone helper scripts and the SAM HTTP API for asking hlquery natural-language questions.
+<div align="center">
 
-It is not wired into the hlquery core server. It runs as a sidecar and calls the existing hlquery HTTP API.
+**A natural-language query service and CLI for hlquery.**
 
-The old terminal entry point is still supported:
+[![Follow hlquery](https://img.shields.io/badge/Follow-%40hlquery-blue?logo=x&logoColor=white&labelColor=000000)](https://x.com/hlquery)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white&labelColor=000000)](https://nodejs.org/)
+[![API](https://img.shields.io/badge/API-Express-000000?logo=express&logoColor=white&labelColor=000000)](https://expressjs.com/)
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-a35a0f?logo=open-source-initiative&logoColor=white&labelColor=000000)](https://opensource.org/licenses/BSD-3-Clause)
 
-```sh
-node etc/sam/hlquery_ask.js "list all collections"
+</div>
+
+> **Development Status**: SAM is under active development and is not recommended for production use. Routes, model behavior, and response formats may change without notice.
+
+### What is SAM?
+
+SAM is a standalone natural-language layer for hlquery. It accepts questions through a command-line tool, HTTP API, or Node interface and translates supported requests into calls to the existing hlquery HTTP API.
+
+Built-in route matching handles common database operations without a model. Optional local GGUF or OpenAI-compatible backends add general answers, route classification, and answers grounded in collection documents.
+
+### Why use it?
+
+Use SAM when you want to query hlquery in plain language, prototype model-assisted search without modifying the core server, or embed the same planning and answer behavior in another Node application. It runs as a sidecar, keeping model dependencies and natural-language logic separate from hlquery itself.
+
+### Quick Start
+
+From the repository root:
+
+```bash
+$ cd etc/sam/
+$ npm install
+$ node hlquery_ask.js "list all collections"
 ```
 
-The implementation now lives under `etc/sam/src`:
+No model is required for built-in requests such as collection listing, server status, document listing, search, and schema inspection.
 
-- `src/cli.js` contains the command-line behavior.
-- `src/service.js` exposes a programmatic SAM service for later Node/Express use.
-- `src/express.js` exposes an optional Express router adapter.
-- `src/index.js` exports the public CommonJS API.
+## Detailed Setup
 
-Start the SAM HTTP API sidecar:
+### Prerequisites
 
-```sh
-cd etc/sam
-npm install
-npm run server
+**Node.js and npm:**
+
+- Node.js 18.0.0 or higher
+- npm 9.0.0 or higher
+- A running hlquery server, available at `http://127.0.0.1:9200` by default
+
+For model-backed answers, provide either a local GGUF model for the optional `node-llama-cpp` backend or an OpenAI-compatible chat-completions server.
+
+### Installation
+
+```bash
+$ cd etc/sam/
+$ npm install
 ```
 
-The server listens on `http://127.0.0.1:9300/sam` by default and uses `HLQUERY_URL=http://127.0.0.1:9200` unless overridden.
+### Configuration
 
-Run with request/debug logs:
+Common environment variables include:
 
-```sh
-node server.js --debug
-node server.js --debug --port 9310 --url http://127.0.0.1:9200
+```bash
+HLQUERY_URL=http://127.0.0.1:9200
+HLQUERY_TOKEN=
+SAM_HOST=127.0.0.1
+SAM_PORT=9300
+SAM_LLM_BACKEND=node
+LLM_BASE_URL=http://127.0.0.1:8080/v1/chat/completions
 ```
 
-## Download Qwen
+Command-line options override these defaults. Use `node hlquery_ask.js --help` or `node server.js --help` for the complete option lists.
 
-Download the default Qwen2.5 14B GGUF model into `run/models` relative to your current directory. This default is the stronger `Q6_K_L` quantization and is about 12.5 GB:
+### Running the SAM API
 
-```sh
-perl etc/sam/download_qwen.pl
+```bash
+$ npm run server
 ```
 
-Choose a destination or model preset:
+The server listens at `http://127.0.0.1:9300/sam` and targets hlquery at `http://127.0.0.1:9200` by default.
 
-```sh
-perl etc/sam/download_qwen.pl --model qwen_14 --dir run/models
-perl etc/sam/download_qwen.pl --model qwen_14_q4 --dir run/models
-perl etc/sam/download_qwen.pl --model qwen_1_5 --dir run/models
-perl etc/sam/download_qwen.pl --model qwen_coder_1_5 --dir run/models
+Custom examples:
+
+```bash
+$ node server.js --debug
+$ node server.js --port 9310 --url http://127.0.0.1:9200
+$ node server.js --llm-backend server \
+    --llm-url http://127.0.0.1:8080/v1/chat/completions
 ```
 
-The downloader checks available disk space before starting known large presets.
+The API exposes:
 
-Start a local OpenAI-compatible llama.cpp server separately, for example:
+- `GET /sam/models`
+- `POST /sam/plan`
+- `POST /sam/ask`
 
-```sh
-llama-server -m run/models/Qwen2.5-14B-Instruct-Q6_K_L.gguf --port 8080
+## Asking hlquery
+
+### Built-in routing
+
+```bash
+$ node hlquery_ask.js "list all collections"
+$ node hlquery_ask.js "show server status"
+$ node hlquery_ask.js "list documents in music"
+$ node hlquery_ask.js "search queen in music"
+$ node hlquery_ask.js "show schema for universities"
+$ node hlquery_ask.js --dry-run "give me all collections"
 ```
 
-## Ask hlquery
+Use another hlquery endpoint with `--url` or `HLQUERY_URL`:
 
-No model is required for the built-in route matcher:
-
-```sh
-node etc/sam/hlquery_ask.js "list all collections"
-node etc/sam/hlquery_ask.js "show server status"
-node etc/sam/hlquery_ask.js "list documents in music"
-node etc/sam/hlquery_ask.js "search queen in music"
-node etc/sam/hlquery_ask.js "show schema for universities"
-node etc/sam/hlquery_ask.js --dry-run "give me all collections"
+```bash
+$ node hlquery_ask.js --url http://127.0.0.1:9200 "show server status"
 ```
 
-Use a different hlquery server:
+### Local GGUF models
 
-```sh
-HLQUERY_URL=http://127.0.0.1:9200 node etc/sam/hlquery_ask.js "give me all collections"
+The default `node` backend looks for the first `.gguf` file in `run/models` or `etc/sam/run/models`. You can also provide an explicit path:
+
+```bash
+$ node hlquery_ask.js --list-models
+$ node hlquery_ask.js --llm --model-path /path/to/model.gguf "where is Chile?"
 ```
 
-For direct general questions unrelated to the database, `--llm` uses the internal Node llama backend by default. From the repo root, install the optional helper dependency once:
+Use `--llm-gpu auto`, `vulkan`, `cuda`, or `metal` to request GPU acceleration. The default is `off`.
 
-```sh
-npm --prefix etc/sam install
+### OpenAI-compatible model server
+
+Start a compatible server separately, then select the `server` backend:
+
+```bash
+$ node hlquery_ask.js --llm \
+    --llm-backend server \
+    --llm-url http://127.0.0.1:8080/v1/chat/completions \
+    "where is Chile?"
 ```
 
-Then download a model if needed:
+Use `--route-llm` when the model should classify a question into an allowlisted hlquery route before execution.
 
-```sh
-perl etc/sam/download_qwen.pl
+### Collection-grounded answers
+
+SAM can search one collection or all collections, select relevant documents, and answer from that context:
+
+```bash
+$ node hlquery_ask.js --ask-collection music "find a good female singer"
+$ node hlquery_ask.js --ask-collection clothing --context-limit 20 "give me wedding ideas"
+$ node hlquery_ask.js --ask-all "tell me about universities in the Boston area"
 ```
 
-Now ask without passing a model path. The script searches `run/models` and `etc/sam/run/models` for a `.gguf` file:
-
-```sh
-node etc/sam/hlquery_ask.js --llm "where is Chile?"
-```
-
-Check which local GGUF model the script would choose:
-
-```sh
-node etc/sam/hlquery_ask.js --list-models
-```
-
-Ask a model to answer from documents in a specific collection. The script searches the collection first, passes matching documents as context, and asks the model to recommend or answer only from those documents:
-
-```sh
-node etc/sam/hlquery_ask.js --ask-collection music "find a good female singer"
-node etc/sam/hlquery_ask.js --debug --ask-collection music "find a good female singer"
-node etc/sam/hlquery_ask.js --ask-collection clothing "give me wedding ideas"
-node etc/sam/hlquery_ask.js --ask-collection clothing --context-limit 20 "give me wedding ideas"
-node etc/sam/hlquery_ask.js --ask-collection universities "universities near a city"
-node etc/sam/hlquery_ask.js --ask-all "find a good female singer"
-node etc/sam/hlquery_ask.js --debug --ask-all "tell me about universities in the Boston area"
-```
-
-For open-ended collection questions, the helper reads collection field hints, asks the configured LLM to rewrite the question into broad lexical search terms, then queries hlquery. If search is sparse, it supplements results with a bounded document scan and reranks candidates locally, weighting the user's original words above LLM-expanded terms. Set `HLQUERY_ASK_LLM_REWRITE=0` to disable the rewrite step.
-
-`--debug` prints the derived search query, hlquery API calls, fallback behavior, document scores, and selected context to stderr. Normal output stays on stdout.
-
-To use an OpenAI-compatible model server instead:
-
-```sh
-LLM_BASE_URL=http://127.0.0.1:8080/v1/chat/completions \
-node etc/sam/hlquery_ask.js --llm --llm-backend server "where is Chile?"
-```
-
-Use a local OpenAI-compatible model server to classify a request into an allowlisted hlquery route first:
-
-```sh
-LLM_BASE_URL=http://127.0.0.1:8080/v1/chat/completions \
-node etc/sam/hlquery_ask.js --route-llm "give me all collections"
-```
+Add `--debug` to print query expansion, API calls, fallback scans, scoring, and context selection to stderr while keeping the final answer on stdout.
 
 ## Use from Node or Express
 
-The package can be imported without going through the CLI:
+Create a service directly:
 
 ```js
 const { createSamService } = require('./etc/sam')
@@ -148,7 +165,7 @@ const result = await sam.answer('give me all collections')
 console.log(result)
 ```
 
-Mount the optional Express router in an app that already uses JSON bodies:
+Or mount the router in an Express application:
 
 ```js
 const express = require('express')
@@ -162,4 +179,4 @@ app.use('/sam', createSamRouter(express, {
 }))
 ```
 
-The router exposes `GET /sam/models`, `POST /sam/plan`, and `POST /sam/ask`.
+The package exports its CLI helpers, service, and Express adapter from `src/index.js`. For the browser interface, see [`../samweb/README.md`](../samweb/README.md).
