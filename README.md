@@ -1,3 +1,5 @@
+> **Development Status**: SAM is under active development and is not recommended for production use. Routes, model behavior, and response formats may change without notice.
+
 <div align="center">
   <img src="https://docs.hlquery.com/img/hlquery/2.png" alt="hlquery logo" width="200">
 </div>
@@ -12,8 +14,6 @@
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-a35a0f?logo=open-source-initiative&logoColor=white&labelColor=000000)](https://opensource.org/licenses/BSD-3-Clause)
 
 </div>
-
-> **Development Status**: SAM is under active development and is not recommended for production use. Routes, model behavior, and response formats may change without notice.
 
 ### What is SAM?
 
