@@ -1,0 +1,27 @@
+{
+  "name": "hlquery-natural-query-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone natural-language helper scripts for hlquery",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "scripts": {
+    "server": "node server.js"
+  },
+  "bin": {
+    "hlquery-ask": "./hlquery_ask.js",
+    "hlquery-sam-server": "./server.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./cli": "./src/cli.js",
+    "./express": "./src/express.js",
+    "./service": "./src/service.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "optionalDependencies": {
+    "node-llama-cpp": "*"
+  }
+}
