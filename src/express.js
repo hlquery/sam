@@ -52,6 +52,9 @@ const createSamRouter = (express, serviceOptions = {}) => {
     if (copy.token) {
       copy.token = `***${String(copy.token).slice(-4)}`
     }
+    if (copy.braveApiKey) {
+      copy.braveApiKey = `***${String(copy.braveApiKey).slice(-4)}`
+    }
     return copy
   }
 

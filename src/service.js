@@ -2,7 +2,7 @@
 
 const core = require('./cli')
 
-const defaultOptionsFor = () => core.parseArgs(['node', 'hlquery_ask.js', '__question__'])
+const defaultOptionsFor = () => core.parseArgs(['node', 'ask.js', '__question__'])
 
 const createOptions = (question, defaults = {}, overrides = {}) => {
   const options = {
@@ -83,7 +83,7 @@ const createSamService = (defaults = {}) => {
 
     if (options.askAll) {
       const context = await core.fetchAllCollectionsContext(options)
-      if (context.documents.length === 0) {
+      if (context.documents.length === 0 && !options.search) {
         throw new Error('No matching documents found across collections.')
       }
       const payload = contextSearchPayload(context)
@@ -93,7 +93,7 @@ const createSamService = (defaults = {}) => {
           documents: context.documents.length,
         })
       }
-      const answer = await core.askDirect(options.question, options, core.buildCollectionPrompt(options.question, context))
+      const answer = await core.askWithOptionalSearch(options.question, options, core.buildCollectionPrompt(options.question, context))
       return {
         action: 'ask_all',
         answer,
@@ -104,7 +104,7 @@ const createSamService = (defaults = {}) => {
 
     if (options.askCollection) {
       const context = await core.fetchCollectionContext(options)
-      if (context.documents.length === 0) {
+      if (context.documents.length === 0 && !options.search) {
         throw new Error(`No documents found in collection "${context.collection}" for query "${context.query}".`)
       }
       const payload = contextSearchPayload(context)
@@ -116,7 +116,7 @@ const createSamService = (defaults = {}) => {
           documents: context.documents.length,
         })
       }
-      const answer = await core.askDirect(options.question, options, core.buildCollectionPrompt(options.question, context))
+      const answer = await core.askWithOptionalSearch(options.question, options, core.buildCollectionPrompt(options.question, context))
       return {
         action: 'ask_collection',
         answer,
@@ -126,7 +126,7 @@ const createSamService = (defaults = {}) => {
     }
 
     if (options.llm) {
-      const text = await core.askDirect(options.question, options)
+      const text = await core.askWithOptionalSearch(options.question, options)
       return { action: 'direct_llm', answer: text }
     }
 

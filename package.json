@@ -9,7 +9,7 @@
     "server": "node server.js"
   },
   "bin": {
-    "hlquery-ask": "./hlquery_ask.js",
+    "hlquery-ask": "./ask.js",
     "hlquery-sam-server": "./server.js"
   },
   "exports": {

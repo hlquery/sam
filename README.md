@@ -32,7 +32,7 @@ From the repository root:
 ```bash
 $ cd etc/sam/
 $ npm install
-$ node hlquery_ask.js "list all collections"
+$ node ask.js "list all collections"
 ```
 
 No model is required for built-in requests such as collection listing, server status, document listing, search, and schema inspection.
@@ -63,13 +63,14 @@ Common environment variables include:
 ```bash
 HLQUERY_URL=http://127.0.0.1:9200
 HLQUERY_TOKEN=
+BRAVE_SEARCH_API_KEY=
 SAM_HOST=127.0.0.1
 SAM_PORT=9300
 SAM_LLM_BACKEND=node
 LLM_BASE_URL=http://127.0.0.1:8080/v1/chat/completions
 ```
 
-Command-line options override these defaults. Use `node hlquery_ask.js --help` or `node server.js --help` for the complete option lists.
+Command-line options override these defaults. Use `node ask.js --help` or `node server.js --help` for the complete option lists.
 
 ### Running the SAM API
 
@@ -99,18 +100,18 @@ The API exposes:
 ### Built-in routing
 
 ```bash
-$ node hlquery_ask.js "list all collections"
-$ node hlquery_ask.js "show server status"
-$ node hlquery_ask.js "list documents in music"
-$ node hlquery_ask.js "search queen in music"
-$ node hlquery_ask.js "show schema for universities"
-$ node hlquery_ask.js --dry-run "give me all collections"
+$ node ask.js "list all collections"
+$ node ask.js "show server status"
+$ node ask.js "list documents in music"
+$ node ask.js "search queen in music"
+$ node ask.js "show schema for universities"
+$ node ask.js --dry-run "give me all collections"
 ```
 
 Use another hlquery endpoint with `--url` or `HLQUERY_URL`:
 
 ```bash
-$ node hlquery_ask.js --url http://127.0.0.1:9200 "show server status"
+$ node ask.js --url http://127.0.0.1:9200 "show server status"
 ```
 
 ### Local GGUF models
@@ -118,8 +119,8 @@ $ node hlquery_ask.js --url http://127.0.0.1:9200 "show server status"
 The default `node` backend looks for the first `.gguf` file in `run/models` or `etc/sam/run/models`. You can also provide an explicit path:
 
 ```bash
-$ node hlquery_ask.js --list-models
-$ node hlquery_ask.js --llm --model-path /path/to/model.gguf "where is Chile?"
+$ node ask.js --list-models
+$ node ask.js --llm --model-path /path/to/model.gguf "where is Chile?"
 ```
 
 Use `--llm-gpu auto`, `vulkan`, `cuda`, or `metal` to request GPU acceleration. The default is `off`.
@@ -129,7 +130,7 @@ Use `--llm-gpu auto`, `vulkan`, `cuda`, or `metal` to request GPU acceleration. 
 Start a compatible server separately, then select the `server` backend:
 
 ```bash
-$ node hlquery_ask.js --llm \
+$ node ask.js --llm \
     --llm-backend server \
     --llm-url http://127.0.0.1:8080/v1/chat/completions \
     "where is Chile?"
@@ -137,15 +138,28 @@ $ node hlquery_ask.js --llm \
 
 Use `--route-llm` when the model should classify a question into an allowlisted hlquery route before execution.
 
+### Optional Brave Search fallback
+
+`--search` enables a single Brave web-search fallback for model-backed answers. SAM first asks the model whether it has enough reliable information. It calls Brave only when the model requests external information, then asks the model to answer from the returned results.
+
+```bash
+$ BRAVE_SEARCH_API_KEY=your-token node ask.js --search "what happened in Chile today?"
+```
+
+The token can be placed in the optional `BRAVE_SEARCH_API_KEY` constant near the top of `ask.js`, or read from the `BRAVE_SEARCH_API_KEY`/`BRAVE_API_KEY` environment variables. It is sent in Brave's `X-Subscription-Token` header. If `--search` is used without a token, SAM exits immediately with `No API key provided.`
+
 ### Collection-grounded answers
 
 SAM can search one collection or all collections, select relevant documents, and answer from that context:
 
 ```bash
-$ node hlquery_ask.js --ask-collection music "find a good female singer"
-$ node hlquery_ask.js --ask-collection clothing --context-limit 20 "give me wedding ideas"
-$ node hlquery_ask.js --ask-all "tell me about universities in the Boston area"
+$ node ask.js --ask-collection music "find a good female singer"
+$ node ask.js --ask-collection clothing --context-limit 20 "give me wedding ideas"
+$ node ask.js --ask-collection universities "universities where it snows"
+$ node ask.js --ask-all "tell me about universities in the Boston area"
 ```
+
+`--search` enables the fallback pipeline: when literal collection search finds no useful evidence, SAM scans and compactly supplies up to 100 collection documents to the LLM for semantic inference. It permits one Brave fallback only if the model still reports insufficient information. Without `--search`, neither fallback is activated.
 
 Add `--debug` to print query expansion, API calls, fallback scans, scoring, and context selection to stderr while keeping the final answer on stdout.
 
