@@ -6,6 +6,7 @@ const path = require('node:path')
 
 const DEFAULT_HLQUERY_URL = process.env.HLQUERY_URL || 'http://127.0.0.1:9200'
 const DEFAULT_LLM_URL = process.env.LLM_BASE_URL || 'http://127.0.0.1:8080/v1/chat/completions'
+const DEFAULT_BRAVE_SEARCH_TIMEOUT_MS = 10_000
 const SAM_DIR = path.resolve(__dirname, '..')
 
 const usage = () => {
@@ -801,6 +802,22 @@ const parseSearchDecision = (response, fallbackQuery) => {
   return { needsSearch: true, query }
 }
 
+const resolveSearchDecision = (response, question, options = {}) => {
+  try {
+    return parseSearchDecision(response, question)
+  } catch (err) {
+    const query = normalizeBraveQuery(question)
+    if (!query) {
+      throw err
+    }
+    progressLog(options, 'model returned an invalid search decision; using the original question', {
+      error: err.message,
+      query,
+    })
+    return { needsSearch: true, query }
+  }
+}
+
 const normalizeBraveQuery = (question) => String(question || '')
   .trim()
   .split(/\s+/)
@@ -826,19 +843,46 @@ const searchBrave = async (question, options = {}) => {
   url.searchParams.set('text_decorations', 'false')
 
   progressLog(options, 'calling Brave Search API', { query, count: 5 })
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      'Accept-Encoding': 'gzip',
-      'X-Subscription-Token': apiKey,
-    },
-  })
+  const fetchImpl = options.fetchImpl || globalThis.fetch
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('Brave Search requires the Fetch API (Node.js 18 or newer).')
+  }
+
+  const configuredTimeout = Number(options.braveSearchTimeoutMs || process.env.BRAVE_SEARCH_TIMEOUT_MS)
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : DEFAULT_BRAVE_SEARCH_TIMEOUT_MS
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  let response
+
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-Subscription-Token': apiKey,
+      },
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(`Brave Search timed out after ${timeoutMs}ms.`)
+    }
+    throw new Error(`Brave Search request failed: ${err.message}`)
+  } finally {
+    clearTimeout(timeout)
+  }
 
   const text = await response.text()
   const payload = safeJsonParse(text)
   if (!response.ok) {
-    const details = payload?.message || payload?.error || text || response.statusText
+    const apiError = payload?.message || payload?.error || payload?.detail
+    const details = typeof apiError === 'string'
+      ? apiError
+      : apiError
+        ? JSON.stringify(apiError)
+        : text || response.statusText
     throw new Error(`Brave Search request failed: HTTP ${response.status} ${details}`)
   }
 
@@ -879,7 +923,7 @@ const askWithOptionalSearch = async (question, options, prompt = buildDirectProm
   }
 
   const initialResponse = await askDirect(question, options, buildSearchDecisionPrompt(prompt))
-  const decision = parseSearchDecision(initialResponse, question)
+  const decision = resolveSearchDecision(initialResponse, question, options)
   if (!decision.needsSearch) {
     debugLog(options, 'model had sufficient information; Brave Search was not called')
     return decision.answer
@@ -2557,6 +2601,7 @@ module.exports = {
   parseHeuristicIntent,
   parseLlmIntent,
   resolveModelPath,
+  resolveSearchDecision,
   searchBrave,
 }
 
