@@ -105,8 +105,11 @@ $ node ask.js "show server status"
 $ node ask.js "list documents in music"
 $ node ask.js "search queen in music"
 $ node ask.js "show schema for universities"
+$ node ask.js --raw "whats the capital of lima"
 $ node ask.js --dry-run "give me all collections"
 ```
+
+Use `--raw` for a direct model-backed answer when the question should not be mapped to an hlquery route.
 
 Use another hlquery endpoint with `--url` or `HLQUERY_URL`:
 

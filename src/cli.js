@@ -10,7 +10,7 @@ const DEFAULT_BRAVE_SEARCH_TIMEOUT_MS = 10_000
 const SAM_DIR = path.resolve(__dirname, '..')
 
 const usage = () => {
-  return `Usage: node etc/sam/ask.js [--url URL] [--token TOKEN] [--llm] [--search] [--route-llm] [--ask-collection NAME] [--ask-all] [--debug] [--dry-run] "question"
+  return `Usage: node etc/sam/ask.js [--url URL] [--token TOKEN] [--llm] [--raw] [--search] [--route-llm] [--ask-collection NAME] [--ask-all] [--debug] [--dry-run] "question"
 
 Examples:
   node etc/sam/ask.js "list all collections"
@@ -18,6 +18,7 @@ Examples:
   node etc/sam/ask.js "list documents in music"
   node etc/sam/ask.js "search queen in music"
   node etc/sam/ask.js "show schema for universities"
+  node etc/sam/ask.js --raw "whats the capital of lima"
   node etc/sam/ask.js --llm "where is Chile?"
   node etc/sam/ask.js --search "what happened in Chile today?"
   node etc/sam/ask.js --ask-collection music "find a good female singer"
@@ -43,6 +44,7 @@ LLM options:
   --show-llama-stderr         Do not hide noisy node-llama-cpp model-load warnings
   --max-tokens N              Maximum generated tokens for direct LLM answers
   --temperature N             Sampling temperature for direct LLM answers
+  --raw                       Ask the LLM directly, skipping hlquery route matching
   --search                    Allow one Brave web search when the LLM lacks sufficient information
 
 Brave Search:
@@ -81,6 +83,7 @@ const parseArgs = (argv) => {
     url: DEFAULT_HLQUERY_URL,
     token: process.env.HLQUERY_TOKEN || '',
     llm: false,
+    raw: false,
     search: false,
     braveApiKey: process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || process.env.HLQUERY_BRAVE_SEARCH_API_KEY || '',
     routeLlm: false,
@@ -124,6 +127,11 @@ const parseArgs = (argv) => {
       continue
     }
     if (arg === '--llm') {
+      options.llm = true
+      continue
+    }
+    if (arg === '--raw') {
+      options.raw = true
       options.llm = true
       continue
     }
@@ -2539,6 +2547,7 @@ const main = async () => {
         action: 'direct_llm',
         backend: options.llmBackend,
         method: options.llmBackend === 'node' ? 'node-llama-cpp' : 'POST',
+        raw: options.raw,
         url: options.llmBackend === 'node' ? undefined : options.llmUrl,
         model: options.llmModel,
         modelPath: resolvedModelPath,
