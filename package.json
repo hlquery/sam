@@ -20,7 +20,8 @@
     "./service": "./src/service.js"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "redis": "^4.7.1"
   },
   "optionalDependencies": {
     "node-llama-cpp": "*"

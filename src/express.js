@@ -63,6 +63,12 @@ const createSamRouter = (express, serviceOptions = {}) => {
     res.json(service.listModels())
   })
 
+  router.get('/cache/search', asyncHandler(async (req, res) => {
+    const limit = Number(req.query?.limit || 50)
+    debugLog('listing Redis search cache', { limit })
+    res.json(await service.listSearchCache({ limit }))
+  }))
+
   router.post('/plan', asyncHandler(async (req, res) => {
     const question = req.body?.question
     const options = req.body?.options || {}

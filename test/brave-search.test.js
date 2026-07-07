@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
+const { tokenOverlapScore } = require('../src/search-cache')
 const { resolveSearchDecision, searchBrave } = require('../src/cli')
 
 test('invalid model decisions fall back to the original Brave query', () => {
@@ -30,6 +31,7 @@ test('searchBrave sends the API token and parses web results', async () => {
   const result = await searchBrave('  hlquery   search  ', {
     braveApiKey: 'test-token',
     fetchImpl,
+    searchCache: false,
   })
 
   assert.equal(request.url.searchParams.get('q'), 'hlquery search')
@@ -44,7 +46,7 @@ test('searchBrave reports structured API errors', async () => {
   }), { status: 401, statusText: 'Unauthorized' })
 
   await assert.rejects(
-    searchBrave('hlquery', { braveApiKey: 'bad-token', fetchImpl }),
+    searchBrave('hlquery', { braveApiKey: 'bad-token', fetchImpl, searchCache: false }),
     /HTTP 401.*SUBSCRIPTION_TOKEN_INVALID/,
   )
 })
@@ -63,7 +65,16 @@ test('searchBrave aborts requests that exceed the timeout', async () => {
       braveApiKey: 'test-token',
       braveSearchTimeoutMs: 5,
       fetchImpl,
+      searchCache: false,
     }),
     /timed out after 5ms/,
   )
+})
+
+test('search cache similarity scores related queries above unrelated queries', () => {
+  const related = tokenOverlapScore('female singer wedding songs', 'best female singer for wedding')
+  const unrelated = tokenOverlapScore('female singer wedding songs', 'redis connection timeout')
+
+  assert.ok(related >= 0.55)
+  assert.ok(unrelated < 0.55)
 })

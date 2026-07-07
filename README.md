@@ -92,6 +92,7 @@ $ node server.js --llm-backend server \
 The API exposes:
 
 - `GET /sam/models`
+- `GET /sam/cache/search`
 - `POST /sam/plan`
 - `POST /sam/ask`
 
@@ -150,6 +151,22 @@ $ BRAVE_SEARCH_API_KEY=your-token node ask.js --search "what happened in Chile t
 ```
 
 The token can be placed in the optional `BRAVE_SEARCH_API_KEY` constant near the top of `ask.js`, or read from the `BRAVE_SEARCH_API_KEY`/`BRAVE_API_KEY` environment variables. It is sent in Brave's `X-Subscription-Token` header. If `--search` is used without a token, SAM exits immediately with `No API key provided.`
+
+### Redis search cache
+
+SAM records successful Brave searches and hlquery document searches in Redis when Redis is available. Cache keys use the `sam::cache::search:*` prefix, and recent keys are tracked in `sam::cache::search:index`.
+
+On a new search SAM first checks for an exact cached request. If there is no exact hit, it scans recent cached searches, scores query-token overlap, and can reuse the best sufficiently similar result before calling Brave or hlquery again. hlquery document-search reuse is limited to the same base URL, method, and collection search path.
+
+```bash
+$ redis-server
+$ SAM_REDIS_URL=redis://127.0.0.1:6379 node ask.js "search queen in music"
+$ curl http://127.0.0.1:9300/sam/cache/search?limit=20
+```
+
+Configure the cache with `SAM_REDIS_URL`, `REDIS_URL`, and `SAM_SEARCH_CACHE_TTL_SECONDS`. Set `SAM_SEARCH_CACHE=0` or pass `--no-search-cache` to skip Redis for a run.
+
+Similar-search reuse is enabled by default. Tune it with `SAM_SEARCH_CACHE_MIN_SCORE` or `--search-cache-min-score`; disable it with `SAM_SEARCH_CACHE_SIMILAR=0` or `--no-search-cache-similar`.
 
 ### Collection-grounded answers
 

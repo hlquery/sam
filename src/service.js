@@ -137,6 +137,7 @@ const createSamService = (defaults = {}) => {
   return {
     answer,
     executeRoute,
+    listSearchCache: (overrides = {}) => core.listSearchCache({ ...defaults, ...overrides }, overrides.limit),
     listModels: core.listModelInfo,
     optionsFor: (question, overrides = {}) => createOptions(question, defaults, overrides),
     planRoute,

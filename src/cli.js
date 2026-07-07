@@ -3,6 +3,13 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
+const {
+  closeSearchCache,
+  findSimilarSearchCache,
+  listSearchCache,
+  readSearchCache,
+  writeSearchCache,
+} = require('./search-cache')
 
 const DEFAULT_HLQUERY_URL = process.env.HLQUERY_URL || 'http://127.0.0.1:9200'
 const DEFAULT_LLM_URL = process.env.LLM_BASE_URL || 'http://127.0.0.1:8080/v1/chat/completions'
@@ -46,9 +53,15 @@ LLM options:
   --temperature N             Sampling temperature for direct LLM answers
   --raw                       Ask the LLM directly, skipping hlquery route matching
   --search                    Allow one Brave web search when the LLM lacks sufficient information
+  --no-search-cache           Disable Redis search caching for this run
+  --redis-url URL             Redis URL for SAM search cache; defaults to redis://127.0.0.1:6379
+  --search-cache-ttl N        Redis search cache TTL in seconds; defaults to 86400
+  --no-search-cache-similar   Disable lookup of similar prior cached searches
+  --search-cache-min-score N  Minimum token-overlap score for similar cache reuse; defaults to 0.55
 
 Brave Search:
   Set BRAVE_SEARCH_API_KEY (or BRAVE_API_KEY). The key is sent only to Brave in X-Subscription-Token.
+  Search results are cached locally in Redis under sam::cache::search:* when Redis is available.
 `
 }
 
@@ -68,6 +81,9 @@ const OPTION_VALUES = new Set([
   '--scan-limit',
   '--max-tokens',
   '--temperature',
+  '--redis-url',
+  '--search-cache-ttl',
+  '--search-cache-min-score',
 ])
 
 const readOptionValue = (argv, index, optionName) => {
@@ -102,6 +118,15 @@ const parseArgs = (argv) => {
     showLlamaStderr: process.env.LLAMA_SHOW_STDERR === '1',
     maxTokens: Number(process.env.LLM_MAX_TOKENS || 512),
     temperature: Number(process.env.LLM_TEMPERATURE || 0.2),
+    searchCache: !['0', 'false', 'off', 'no', 'disabled'].includes(
+      String(process.env.SAM_SEARCH_CACHE || process.env.HLQUERY_SAM_SEARCH_CACHE || '').toLowerCase(),
+    ),
+    redisUrl: process.env.SAM_REDIS_URL || process.env.REDIS_URL || '',
+    searchCacheTtlSeconds: Number(process.env.SAM_SEARCH_CACHE_TTL_SECONDS || 86400),
+    searchCacheSimilar: !['0', 'false', 'off', 'no', 'disabled'].includes(
+      String(process.env.SAM_SEARCH_CACHE_SIMILAR || process.env.HLQUERY_SAM_SEARCH_CACHE_SIMILAR || '').toLowerCase(),
+    ),
+    searchCacheMinScore: Number(process.env.SAM_SEARCH_CACHE_MIN_SCORE || 0.55),
     dryRun: false,
     questionParts: [],
   }
@@ -138,6 +163,14 @@ const parseArgs = (argv) => {
     if (arg === '--search') {
       options.search = true
       options.llm = true
+      continue
+    }
+    if (arg === '--no-search-cache') {
+      options.searchCache = false
+      continue
+    }
+    if (arg === '--no-search-cache-similar') {
+      options.searchCacheSimilar = false
       continue
     }
     if (arg === '--route-llm') {
@@ -221,6 +254,21 @@ const parseArgs = (argv) => {
       i += 1
       continue
     }
+    if (arg === '--redis-url') {
+      options.redisUrl = readOptionValue(argv, i, arg)
+      i += 1
+      continue
+    }
+    if (arg === '--search-cache-ttl') {
+      options.searchCacheTtlSeconds = Number(readOptionValue(argv, i, arg))
+      i += 1
+      continue
+    }
+    if (arg === '--search-cache-min-score') {
+      options.searchCacheMinScore = Number(readOptionValue(argv, i, arg))
+      i += 1
+      continue
+    }
     if (arg.startsWith('--') || OPTION_VALUES.has(arg)) {
       throw new Error(`Unknown option: ${arg}`)
     }
@@ -255,6 +303,12 @@ const parseArgs = (argv) => {
   }
   if (!Number.isFinite(options.temperature) || options.temperature < 0) {
     options.temperature = 0.2
+  }
+  if (!Number.isFinite(options.searchCacheTtlSeconds) || options.searchCacheTtlSeconds <= 0) {
+    options.searchCacheTtlSeconds = 86400
+  }
+  if (!Number.isFinite(options.searchCacheMinScore) || options.searchCacheMinScore <= 0 || options.searchCacheMinScore > 1) {
+    options.searchCacheMinScore = 0.55
   }
   if (options.askAll && options.askCollection) {
     throw new Error('Use either --ask-all or --ask-collection, not both.')
@@ -833,6 +887,40 @@ const normalizeBraveQuery = (question) => String(question || '')
   .join(' ')
   .slice(0, 400)
 
+const readCachedSearch = async (source, identity, options = {}) => {
+  try {
+    const cached = await readSearchCache(source, identity, options)
+    if (cached) {
+      progressLog(options, 'Redis search cache hit', { source, key: cached.key })
+      return cached.payload
+    }
+    const similar = await findSimilarSearchCache(source, identity, options)
+    if (similar) {
+      progressLog(options, 'Redis similar search cache hit', {
+        source,
+        key: similar.key,
+        score: Number(similar.score.toFixed(3)),
+        cachedQuery: similar.metadata?.query,
+      })
+      return similar.payload
+    }
+  } catch (err) {
+    progressLog(options, 'Redis search cache read skipped', err.message)
+  }
+  return null
+}
+
+const writeCachedSearch = async (source, identity, payload, options = {}, metadata = {}) => {
+  try {
+    const cached = await writeSearchCache(source, identity, payload, options, metadata)
+    if (cached) {
+      progressLog(options, 'Redis search cache stored', { source, key: cached.key })
+    }
+  } catch (err) {
+    progressLog(options, 'Redis search cache write skipped', err.message)
+  }
+}
+
 const searchBrave = async (question, options = {}) => {
   const apiKey = resolveBraveApiKey(options)
   if (!apiKey) {
@@ -849,6 +937,17 @@ const searchBrave = async (question, options = {}) => {
   url.searchParams.set('count', '5')
   url.searchParams.set('safesearch', 'moderate')
   url.searchParams.set('text_decorations', 'false')
+
+  const cacheIdentity = {
+    query,
+    count: 5,
+    safesearch: 'moderate',
+    text_decorations: false,
+  }
+  const cached = await readCachedSearch('brave', cacheIdentity, options)
+  if (cached) {
+    return cached
+  }
 
   progressLog(options, 'calling Brave Search API', { query, count: 5 })
   const fetchImpl = options.fetchImpl || globalThis.fetch
@@ -908,7 +1007,12 @@ const searchBrave = async (question, options = {}) => {
     throw new Error('Brave Search returned no results.')
   }
 
-  return { query, results }
+  const payloadForCache = { query, results }
+  await writeCachedSearch('brave', cacheIdentity, payloadForCache, options, {
+    query,
+    result_count: results.length,
+  })
+  return payloadForCache
 }
 
 const buildBraveAnswerPrompt = (prompt, webSearch) => ({
@@ -2485,6 +2589,25 @@ const executeHlquery = async (baseUrl, token, route, options = {}) => {
     throw new Error('Refusing dangerous route. Set HLQUERY_ALLOW_DANGEROUS=1 if you really want to run it.')
   }
 
+  const url = `${cleanBaseUrl(baseUrl)}${route.path}`
+  const cacheableSearch = route.action === 'search_documents' && route.method === 'POST' && route.body?.q
+  const cacheIdentity = cacheableSearch
+    ? {
+      engine: 'hlquery',
+      baseUrl: cleanBaseUrl(baseUrl),
+      method: route.method,
+      path: route.path,
+      body: route.body,
+    }
+    : null
+
+  if (cacheIdentity) {
+    const cached = await readCachedSearch('hlquery', cacheIdentity, options)
+    if (cached) {
+      return cached
+    }
+  }
+
   const headers = { Accept: 'application/json' }
   if (route.body !== undefined) {
     headers['Content-Type'] = 'application/json'
@@ -2493,7 +2616,6 @@ const executeHlquery = async (baseUrl, token, route, options = {}) => {
     headers.Authorization = `Bearer ${token}`
   }
 
-  const url = `${cleanBaseUrl(baseUrl)}${route.path}`
   progressLog(options, 'calling hlquery API', {
     method: route.method,
     url,
@@ -2516,6 +2638,14 @@ const executeHlquery = async (baseUrl, token, route, options = {}) => {
   if (!response.ok) {
     const message = typeof data === 'string' ? data : JSON.stringify(data)
     throw new Error(`hlquery request failed: HTTP ${response.status} ${message}`)
+  }
+
+  if (cacheIdentity) {
+    await writeCachedSearch('hlquery', cacheIdentity, data, options, {
+      collection: route.collection,
+      query: route.body.q,
+      path: route.path,
+    })
   }
 
   return data
@@ -2605,6 +2735,7 @@ module.exports = {
   fetchCollectionContext,
   intentToRoute,
   listModelInfo,
+  listSearchCache,
   main,
   parseArgs,
   parseHeuristicIntent,
@@ -2615,8 +2746,10 @@ module.exports = {
 }
 
 if (require.main === module) {
-  main().catch((err) => {
-    console.error(err.message)
-    process.exit(1)
-  })
+  main()
+    .catch((err) => {
+      console.error(err.message)
+      process.exitCode = 1
+    })
+    .finally(() => closeSearchCache().catch(() => {}))
 }
