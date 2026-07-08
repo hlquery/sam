@@ -93,7 +93,12 @@ const createSamService = (defaults = {}) => {
           documents: context.documents.length,
         })
       }
-      const answer = await core.askWithOptionalSearch(options.question, options, core.buildCollectionPrompt(options.question, context))
+      const answer = await core.askWithOptionalSearch(options.question, {
+        ...options,
+        forceWebSearch: options.search && context.documents.length === 0,
+        externalSearchQuery: context.query || options.question,
+        externalSearchReason: context.documents.length === 0 ? 'empty all-collections context' : undefined,
+      }, core.buildCollectionPrompt(options.question, context))
       return {
         action: 'ask_all',
         answer,
@@ -116,7 +121,12 @@ const createSamService = (defaults = {}) => {
           documents: context.documents.length,
         })
       }
-      const answer = await core.askWithOptionalSearch(options.question, options, core.buildCollectionPrompt(options.question, context))
+      const answer = await core.askWithOptionalSearch(options.question, {
+        ...options,
+        forceWebSearch: options.search && context.documents.length === 0,
+        externalSearchQuery: context.query || options.question,
+        externalSearchReason: context.documents.length === 0 ? 'empty collection context' : undefined,
+      }, core.buildCollectionPrompt(options.question, context))
       return {
         action: 'ask_collection',
         answer,

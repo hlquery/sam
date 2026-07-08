@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const { tokenOverlapScore } = require('../src/search-cache')
-const { resolveSearchDecision, searchBrave } = require('../src/cli')
+const { askWithOptionalSearch, resolveSearchDecision, searchBrave } = require('../src/cli')
 
 test('invalid model decisions fall back to the original Brave query', () => {
   assert.deepEqual(
@@ -69,6 +69,58 @@ test('searchBrave aborts requests that exceed the timeout', async () => {
     }),
     /timed out after 5ms/,
   )
+})
+
+test('askWithOptionalSearch can force Brave when db context is empty', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options })
+    if (url instanceof URL && url.hostname === 'api.search.brave.com') {
+      return new Response(JSON.stringify({
+        web: {
+          results: [{
+            title: 'Outside result',
+            url: 'https://example.com/outside',
+            description: 'External evidence for an out-of-database question.',
+          }],
+        },
+      }), { status: 200 })
+    }
+
+    const body = JSON.parse(options.body)
+    assert.match(body.messages[1].content, /Brave Search results/)
+    assert.match(body.messages[1].content, /https:\/\/example\.com\/outside/)
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: 'Answered from Brave results.' } }],
+    }), { status: 200 })
+  }
+
+  try {
+    const answer = await askWithOptionalSearch('outside db question', {
+      braveApiKey: 'test-token',
+      externalSearchQuery: 'outside db question',
+      forceWebSearch: true,
+      llmBackend: 'server',
+      llmModel: 'test-model',
+      llmUrl: 'https://llm.example/v1/chat/completions',
+      maxTokens: 128,
+      search: true,
+      searchCache: false,
+      temperature: 0,
+    }, {
+      system: 'Answer with evidence.',
+      question: 'Collection context has no documents.',
+    })
+
+    assert.equal(answer, 'Answered from Brave results.')
+    assert.equal(calls.length, 2)
+    assert.equal(calls[0].url.hostname, 'api.search.brave.com')
+    assert.equal(calls[1].url, 'https://llm.example/v1/chat/completions')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test('search cache similarity scores related queries above unrelated queries', () => {

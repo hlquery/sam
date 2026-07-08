@@ -1034,6 +1034,19 @@ const askWithOptionalSearch = async (question, options, prompt = buildDirectProm
     throw new Error('No API key provided.')
   }
 
+  if (options.forceWebSearch) {
+    const query = normalizeBraveQuery(options.externalSearchQuery || question)
+    if (!query) {
+      throw new Error('Brave Search requires a non-empty query.')
+    }
+    progressLog(options, 'external search required; performing Brave search', {
+      query,
+      reason: options.externalSearchReason || undefined,
+    })
+    const webSearch = await searchBrave(query, options)
+    return askDirect(question, options, buildBraveAnswerPrompt(prompt, webSearch))
+  }
+
   const initialResponse = await askDirect(question, options, buildSearchDecisionPrompt(prompt))
   const decision = resolveSearchDecision(initialResponse, question, options)
   if (!decision.needsSearch) {
@@ -2504,7 +2517,12 @@ const askCollection = async (options) => {
     scanned: context.scanned,
     documents: context.documents.length,
   })
-  const answer = await askWithOptionalSearch(options.question, options, buildCollectionPrompt(options.question, context))
+  const answer = await askWithOptionalSearch(options.question, {
+    ...options,
+    forceWebSearch: options.search && context.documents.length === 0,
+    externalSearchQuery: context.query || options.question,
+    externalSearchReason: context.documents.length === 0 ? 'empty collection context' : undefined,
+  }, buildCollectionPrompt(options.question, context))
   console.error(`${context.route.method} ${context.route.path}`)
   if (context.scanned) {
     console.error(`Scanned documents: ${context.scanned}`)
@@ -2545,7 +2563,12 @@ const askAll = async (options) => {
     routes: context.routes.length,
     documents: context.documents.length,
   })
-  const answer = await askWithOptionalSearch(options.question, options, buildCollectionPrompt(options.question, context))
+  const answer = await askWithOptionalSearch(options.question, {
+    ...options,
+    forceWebSearch: options.search && context.documents.length === 0,
+    externalSearchQuery: context.query || options.question,
+    externalSearchReason: context.documents.length === 0 ? 'empty all-collections context' : undefined,
+  }, buildCollectionPrompt(options.question, context))
   console.error(`Searched collections: ${context.collections.length}`)
   console.error(`Context documents: ${context.documents.length}`)
   console.log(answer)
