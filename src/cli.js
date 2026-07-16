@@ -2455,6 +2455,9 @@ Do not invent items that are not present in the documents.`
 
   const contextText = JSON.stringify({
     collection: context.collection,
+    context_source: context.source,
+    reused_fetched_documents: context.reusedFetchedDocuments,
+    received_documents: context.receivedDocuments,
     search_query: context.query,
     requested_limit: context.requestedLimit,
     requested_offset: context.requestedOffset,

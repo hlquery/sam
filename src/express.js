@@ -49,6 +49,19 @@ const createSamRouter = (express, serviceOptions = {}) => {
 
   const safeOptions = (options) => {
     const copy = { ...(options || {}) }
+    if (Array.isArray(copy.contextDocuments)) {
+      let approximateBytes
+      try {
+        approximateBytes = Buffer.byteLength(JSON.stringify(copy.contextDocuments), 'utf8')
+      } catch {
+        approximateBytes = undefined
+      }
+      copy.contextDocuments = {
+        count: copy.contextDocuments.length,
+        approximateBytes,
+        redacted: true,
+      }
+    }
     if (copy.token) {
       copy.token = `***${String(copy.token).slice(-4)}`
     }

@@ -96,6 +96,31 @@ The API exposes:
 - `POST /sam/plan`
 - `POST /sam/ask`
 
+### Reusing already-fetched documents
+
+`POST /sam/ask` can answer from documents that a client already has in memory. Pass them as `options.contextDocuments`; SAM validates, deduplicates, ranks, and compacts this context locally instead of fetching the same collection again. Up to 200 candidates and 750 KiB are accepted by the service, after which the normal `contextLimit` controls how many documents reach the model.
+
+```bash
+curl -X POST http://127.0.0.1:9300/sam/ask \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "Summarize and improve these results",
+    "options": {
+      "askCollection": "universities",
+      "contextDocuments": [
+        {"id":"u-1","name":"Example University","state":"Chile"}
+      ],
+      "contextCollection": "universities",
+      "contextQuery": "universities in Chile",
+      "contextSource": "my-fetched-results",
+      "preferProvidedContext": true,
+      "contextLimit": 12
+    }
+  }'
+```
+
+When reusable context is used, the response has `action: "ask_provided_context"` and `context.reusedFetchedDocuments: true`. Set `preferProvidedContext: false` to ignore the supplied documents and run the usual hlquery retrieval pipeline.
+
 ## Asking hlquery
 
 ### Built-in routing
