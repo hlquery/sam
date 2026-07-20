@@ -28,13 +28,13 @@ const readOptionValue = (argv, index, name) => {
 
 const parseServerArgs = (argv) => {
   const options = {
-    port: Number(process.env.SAM_PORT || process.env.SAMWEB_SAM_PORT || process.env.PORT || 9300),
-    host: process.env.SAM_HOST || process.env.SAMWEB_SAM_HOST || '127.0.0.1',
+    port: Number(process.env.SAM_PORT || process.env.PORT || 9300),
+    host: process.env.SAM_HOST || '127.0.0.1',
     hlqueryUrl: process.env.HLQUERY_URL || 'http://127.0.0.1:9200',
-    askTimeoutMs: Number(process.env.SAM_ASK_TIMEOUT_MS || process.env.SAMWEB_ASK_TIMEOUT_MS || DEFAULT_ASK_TIMEOUT_MS),
+    askTimeoutMs: Number(process.env.SAM_ASK_TIMEOUT_MS || DEFAULT_ASK_TIMEOUT_MS),
     llmBackend: process.env.SAM_LLM_BACKEND || process.env.LLM_BACKEND || 'node',
     llmUrl: String(process.env.SAM_LLM_URL || process.env.LLM_BASE_URL || '').trim() || 'http://127.0.0.1:8080/v1/chat/completions',
-    debug: process.env.SAM_DEBUG === '1' || process.env.SAMWEB_DEBUG === '1',
+    debug: process.env.SAM_DEBUG === '1',
   }
 
   for (let i = 2; i < argv.length; i += 1) {

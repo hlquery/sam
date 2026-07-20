@@ -238,4 +238,4 @@ app.use('/sam', createSamRouter(express, {
 }))
 ```
 
-The package exports its CLI helpers, service, and Express adapter from `src/index.js`. For the browser interface, see [`../samweb/README.md`](../samweb/README.md).
+The package exports its CLI helpers, service, and Express adapter from `src/index.js`.

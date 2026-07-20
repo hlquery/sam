@@ -34,14 +34,14 @@ test('answer reuses provided documents without fetching hlquery', async () => {
         { id: 'too-large', content: 'x'.repeat(751 * 1024) },
         { id: 'u-1', name: 'Fetched University', state: 'Chile' },
       ],
-      contextSource: 'samweb-search-results',
+      contextSource: 'provided-search-results',
       preferProvidedContext: true,
     })
 
     assert.equal(result.action, 'ask_provided_context')
     assert.equal(result.answer, 'Improved answer from fetched records.')
     assert.equal(result.context.reusedFetchedDocuments, true)
-    assert.equal(result.context.source, 'samweb-search-results')
+    assert.equal(result.context.source, 'provided-search-results')
     assert.equal(result.context.receivedDocuments, 2)
     assert.equal(result.context.scanned, 1)
     assert.equal(result.context.documents.length, 1)
