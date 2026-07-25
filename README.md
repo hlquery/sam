@@ -1,7 +1,7 @@
 > **Development Status**: SAM is under active development and is not recommended for production use. Routes, model behavior, and response formats may change without notice.
 
 <div align="center">
-  <img src="../docs/static/img/hlquery/2.png" alt="hlquery logo" width="200">
+  <img src="https://docs.hlquery.com/img/hlquery/2.png" alt="hlquery logo" width="200">
 </div>
 
 <div align="center">
