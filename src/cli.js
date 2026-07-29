@@ -1571,6 +1571,7 @@ const getAscendingRankValue = (doc) => {
     return null
   }
   for (const field of [
+    'demo_rank',
     'webometrics_world_rank',
     'rank',
     'world_rank',
