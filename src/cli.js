@@ -771,39 +771,62 @@ const askLlmNode = async (question, options, prompt = buildDirectPrompt(question
   })
 
   const answer = await withFilteredStderr(options, async () => {
+    let llama
+    let model
+    let context
+    let session
+
     progressLog(options, 'initializing node-llama-cpp runtime')
-    const llama = await getLlama({
-      gpu: resolveLlmGpu(options.llmGpu),
-      logLevel: options.showLlamaStderr ? LlamaLogLevel?.warn : LlamaLogLevel?.error,
-      logger: (level, message) => {
-        const text = String(message || '')
-        if (!options.showLlamaStderr && text.includes('control-looking token:')) {
+    try {
+      llama = await getLlama({
+        gpu: resolveLlmGpu(options.llmGpu),
+        logLevel: options.showLlamaStderr ? LlamaLogLevel?.warn : LlamaLogLevel?.error,
+        logger: (level, message) => {
+          const text = String(message || '')
+          if (!options.showLlamaStderr && text.includes('control-looking token:')) {
+            return
+          }
+          if (options.showLlamaStderr) {
+            console.error(`[node-llama-cpp] ${level}: ${text.trim()}`)
+          }
+        },
+      })
+      progressLog(options, 'loading model file', { modelPath })
+      model = await llama.loadModel({ modelPath })
+      progressLog(options, 'creating model context')
+      context = await model.createContext()
+      progressLog(options, 'creating chat session')
+      session = new LlamaChatSession({
+        contextSequence: context.getSequence(),
+        systemPrompt: prompt.system,
+      })
+
+      progressLog(options, 'prompting local model', {
+        maxTokens: options.maxTokens,
+        temperature: options.temperature,
+        promptChars: prompt.question.length,
+      })
+      return String(await session.prompt(prompt.question, {
+        maxTokens: options.maxTokens,
+        temperature: options.temperature,
+      })).trim()
+    } finally {
+      const dispose = async (label, resource) => {
+        if (!resource || typeof resource.dispose !== 'function') {
           return
         }
-        if (options.showLlamaStderr) {
-          console.error(`[node-llama-cpp] ${level}: ${text.trim()}`)
+        try {
+          await resource.dispose()
+        } catch (err) {
+          debugLog(options, `could not dispose ${label}`, err.message)
         }
-      },
-    })
-    progressLog(options, 'loading model file', { modelPath })
-    const model = await llama.loadModel({ modelPath })
-    progressLog(options, 'creating model context')
-    const context = await model.createContext()
-    progressLog(options, 'creating chat session')
-    const session = new LlamaChatSession({
-      contextSequence: context.getSequence(),
-      systemPrompt: prompt.system,
-    })
+      }
 
-    progressLog(options, 'prompting local model', {
-      maxTokens: options.maxTokens,
-      temperature: options.temperature,
-      promptChars: prompt.question.length,
-    })
-    return String(await session.prompt(prompt.question, {
-      maxTokens: options.maxTokens,
-      temperature: options.temperature,
-    })).trim()
+      await dispose('llama chat session', session)
+      await dispose('llama context', context)
+      await dispose('llama model', model)
+      await dispose('llama runtime', llama)
+    }
   })
 
   if (!answer) {
@@ -2748,6 +2771,21 @@ const main = async () => {
   console.log(JSON.stringify(result, null, 2))
 }
 
+const runCli = async (mainFn = main, closeFn = closeSearchCache) => {
+  try {
+    await mainFn()
+  } catch (err) {
+    console.error(err.message)
+    process.exitCode = 1
+  } finally {
+    try {
+      await closeFn()
+    } catch (err) {
+      debugLog({}, 'could not close search cache', err.message)
+    }
+  }
+}
+
 module.exports = {
   askAll,
   askCollection,
@@ -2769,14 +2807,10 @@ module.exports = {
   parseLlmIntent,
   resolveModelPath,
   resolveSearchDecision,
+  runCli,
   searchBrave,
 }
 
 if (require.main === module) {
-  main()
-    .catch((err) => {
-      console.error(err.message)
-      process.exitCode = 1
-    })
-    .finally(() => closeSearchCache().catch(() => {}))
+  runCli()
 }

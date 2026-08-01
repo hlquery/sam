@@ -143,6 +143,10 @@ Use another hlquery endpoint with `--url` or `HLQUERY_URL`:
 $ node ask.js --url http://127.0.0.1:9200 "show server status"
 ```
 
+`ask.js` is a one-shot command: after a supplied question succeeds or fails,
+SAM closes its Redis and local-model resources and exits. Only `server.js` is
+intended to remain running for multiple requests.
+
 ### Local GGUF models
 
 The default `node` backend looks for the first `.gguf` file in `run/models` or `etc/sam/run/models`. You can also provide an explicit path:

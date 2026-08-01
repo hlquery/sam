@@ -9,9 +9,6 @@ if (BRAVE_SEARCH_API_KEY && !process.env.BRAVE_SEARCH_API_KEY) {
   process.env.BRAVE_SEARCH_API_KEY = BRAVE_SEARCH_API_KEY
 }
 
-const { main } = require('./src/cli')
+const { runCli } = require('./src/cli')
 
-main().catch((err) => {
-  console.error(err.message)
-  process.exit(1)
-})
+runCli()
